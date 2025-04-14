@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quản lý thư mục video</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+        .sidebar-left {
+            width: 300px;
+            background: #f4f4f4;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            border-right: 1px solid #ddd;
+        }
+        .sidebar-right {
+            width: 300px;
+            background: #f4f4f4;
+            padding: 20px;
+            box-sizing: border-box;
+            position: fixed;
+            right: 0;
+            top: 0;
+            height: 100%;
+            overflow-y: auto;
+            border-left: 1px solid #ddd;
+        }
+        .content {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            margin-right: 300px;
+        }
+        h2, h3 {
+            margin-top: 0;
+        }
+        input[type="text"] {
+            padding: 10px;
+            width: 100%;
+            margin: 10px 0;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px 0;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #fff;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+        li button {
+            background: #ff4444;
+            width: auto;
+        }
+        li button:hover {
+            background: #cc0000;
+        }
+        .error {
+            color: red;
+            font-size: 14px;
+            margin: 5px 0;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        .qr-code {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .qr-code img {
+            max-width: 100%;
+        }
+        .ip-info {
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        .ip-info a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .ip-info a:hover {
+            text-decoration: underline;
+        }
+        input[type="file"] {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar-left">
+            <h2>Quản lý thư mục</h2>
+            <div class="input-group">
+                <button onclick="addInput()">Thêm thư mục mới</button>
+                <button onclick="document.getElementById('txtFileInput').click()">Load Text</button>
+                <input type="file" id="txtFileInput" accept=".txt">
+                <p id="error-txt" class="error"></p>
+                <div id="inputContainer"></div>
+            </div>
+            <h3>Thư mục yêu thích</h3>
+            <div class="input-group">
+                <input type="text" id="favoriteFolder" placeholder="Nhập đường dẫn (VD: C:/Favorites)">
+                <button onclick="saveFavoriteFolder()">Lưu</button>
+                <p id="error-favorite" class="error"></p>
+            </div>
+        </div>
+        <div class="content">
+            <h3>Danh sách thư mục đã load</h3>
+            <ul id="folderList"></ul>
+        </div>
+        <div class="sidebar-right">
+            <div class="ip-info">
+                <p>Truy cập từ điện thoại tại: <b><a href="/mobile">http://192.168.137.1:3000/mobile</a></b></p>
+                <p>(IP hotspot có thể khác, kiểm tra bằng ipconfig)</p>
+            </div>
+            <div class="qr-code">
+                <p>Quét QR Code để truy cập từ điện thoại:</p>
+                <img id="qrCode" alt="QR Code">
+            </div>
+        </div>
+    </div>
+    <script>
+        let inputCount = 0;
+        let mediaFolders = [];
+        let favoriteFolder = '';
+
+        // Load initial data
+        async function loadInitialData() {
+            try {
+                const response = await fetch('/get-folders', {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                mediaFolders = data.mediaFolders || [];
+                favoriteFolder = data.favoriteFolder || '';
+                document.getElementById('favoriteFolder').value = favoriteFolder;
+                updateFolderList();
+                loadQRCode();
+            } catch (err) {
+                console.error('Lỗi tải dữ liệu ban đầu:', err);
+            }
+        }
+
+        // Update folder list
+        function updateFolderList() {
+            const folderList = document.getElementById('folderList');
+            folderList.innerHTML = mediaFolders.length > 0
+                ? mediaFolders
+                      .map(
+                          (folder, index) =>
+                              `<li>${folder}<button onclick="deleteFolder(${index})">Xóa</button></li>`
+                      )
+                      .join('')
+                : '<li>Chưa có thư mục nào</li>';
+        }
+
+        // Load QR Code
+        async function loadQRCode() {
+            try {
+                const response = await fetch('/get-qr-code');
+                const data = await response.json();
+                document.getElementById('qrCode').src = data.qrCodeUrl;
+            } catch (err) {
+                console.error('Lỗi tạo QR Code:', err);
+                document.getElementById('qrCode').src = '';
+            }
+        }
+
+        function addInput() {
+            const container = document.getElementById('inputContainer');
+            const div = document.createElement('div');
+            div.className = 'input-group';
+            div.id = 'input-group-' + inputCount;
+            div.innerHTML = `
+                <input type="text" id="folderPath-${inputCount}" placeholder="Nhập đường dẫn thư mục (VD: C:/Videos)">
+                <button onclick="loadFolder(${inputCount})">Load thư mục</button>
+                <p id="error-${inputCount}" class="error"></p>
+            `;
+            container.appendChild(div);
+            inputCount++;
+        }
+
+        async function loadFolder(id) {
+            const folder = document.getElementById('folderPath-' + id).value.trim();
+            if (!folder) {
+                document.getElementById('error-' + id).textContent = 'Vui lòng nhập đường dẫn';
+                return;
+            }
+            try {
+                const response = await fetch('/add-folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder: folder })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('input-group-' + id).remove();
+                    mediaFolders = result.mediaFolders;
+                    updateFolderList();
+                } else {
+                    document.getElementById('error-' + id).textContent = 'Lỗi: ' + result.error;
+                }
+            } catch (err) {
+                document.getElementById('error-' + id).textContent = 'Lỗi kết nối server: ' + err.message;
+            }
+        }
+
+        async function loadTxtFile(event) {
+            const file = event.target.files[0];
+            const errorTxt = document.getElementById('error-txt');
+            errorTxt.textContent = '';
+
+            if (!file) {
+                errorTxt.textContent = 'Vui lòng chọn một file';
+                return;
+            }
+
+            if (!file.name.endsWith('.txt')) {
+                errorTxt.textContent = 'File phải có định dạng .txt';
+                return;
+            }
+
+            try {
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    const paths = e.target.result.split('\n').map(path => path.trim()).filter(path => path);
+                    if (paths.length === 0) {
+                        errorTxt.textContent = 'File không chứa đường dẫn hợp lệ';
+                        return;
+                    }
+
+                    for (const folder of paths) {
+                        try {
+                            const response = await fetch('/add-folder', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ folder: folder })
+                            });
+                            const result = await response.json();
+                            if (result.success) {
+                                mediaFolders = result.mediaFolders;
+                                updateFolderList();
+                            } else {
+                                errorTxt.textContent = `Lỗi khi thêm thư mục "${folder}": ${result.error}`;
+                                return;
+                            }
+                        } catch (err) {
+                            errorTxt.textContent = `Lỗi kết nối server khi thêm "${folder}": ${err.message}`;
+                            return;
+                        }
+                    }
+                    errorTxt.textContent = 'Đã thêm tất cả thư mục từ file';
+                };
+                reader.onerror = function() {
+                    errorTxt.textContent = 'Lỗi đọc file';
+                };
+                reader.readAsText(file);
+            } catch (err) {
+                errorTxt.textContent = 'Lỗi xử lý file: ' + err.message;
+            }
+
+            // Reset input file để cho phép chọn lại file cùng tên
+            event.target.value = '';
+        }
+
+        async function saveFavoriteFolder() {
+            const folder = document.getElementById('favoriteFolder').value.trim();
+            if (!folder) {
+                document.getElementById('error-favorite').textContent = 'Vui lòng nhập đường dẫn';
+                return;
+            }
+            try {
+                const response = await fetch('/set-favorite-folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder: folder })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    favoriteFolder = folder;
+                    document.getElementById('error-favorite').textContent = '';
+                } else {
+                    document.getElementById('error-favorite').textContent = 'Lỗi: ' + result.error;
+                }
+            } catch (err) {
+                document.getElementById('error-favorite').textContent = 'Lỗi kết nối server: ' + err.message;
+            }
+        }
+
+        async function deleteFolder(index) {
+            try {
+                const response = await fetch('/delete-folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ index: index })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    mediaFolders = result.mediaFolders;
+                    updateFolderList();
+                } else {
+                    alert('Lỗi: ' + result.error);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối server: ' + err.message);
+            }
+        }
+
+        // Attach event listener for txt file input
+        document.getElementById('txtFileInput').addEventListener('change', loadTxtFile);
+
+        // Initialize
+        loadInitialData();
+    </script>
+</body>
+</html>
