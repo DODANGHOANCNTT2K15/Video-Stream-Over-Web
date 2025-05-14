@@ -12,12 +12,13 @@ A simple Node.js-based local streaming server that allows you to share and watch
 - ✅ No external dependencies or cloud services — **runs entirely locally**
 
 ## 🛠 Folder Structure
+```
 .
 ├── server.js                # Main server
 ├── public/
-│   ├── index.html          # Desktop UI
-│   └── mobile.html         # Mobile UI
-
+    ├── index.html          # Desktop UI
+    └── mobile.html         # Mobile UI
+```
 ## 📦 Libraries Used
 
 - Express
